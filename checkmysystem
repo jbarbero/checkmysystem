@@ -1,0 +1,209 @@
+#!/bin/bash
+
+### Config
+# Recognized params: prog, min_ver, ver_flag, aptpkg, brewpkg, ppa, brewtap
+
+PROGRAMS="
+    prog=7z             aptpkg=p7zip                    brewpkg=p7zip
+    prog=ack            aptpkg=ack
+    prog=ag             aptpkg=silversearcher-ag        brewpkg=ag
+    prog=bash                                                                   min_ver=4.0
+    prog=brew           aptpkg=NA
+    prog=c++filt
+    prog=convert        aptpkg=imagemagick              brewpkg=imagemagick
+    prog=ctags          aptpkg=exuberant-ctags          brewpkg=ctags           min_ver=5.8
+    prog=curl           aptpkg=curl
+    prog=dos2unix       aptpkg=tofrodos                 brewpkg=dos2unix
+    prog=dtrx           aptpkg=dtrx                     brewpkg=dtrx
+    prog=elinks         aptpkg=elinks                   brewpkg=elinks
+    prog=exiftool       aptpkg=libimage-exiftool-perl   brewpkg=exiftool
+    prog=fdupes                                         brewpkg=fdupes
+    prog=ffmpeg                                         brewpkg=ffmpeg
+    prog=gawk           aptpkg=NA                       brewpkg=gawk
+    prog=gcc
+    prog=gdate          aptpkg=NA                       brewpkg=coreutils
+    prog=gfind          aptpkg=NA                       brewpkg=findutils
+    prog=ggrep          aptpkg=NA                       brewpkg=grep
+    prog=gtar           aptpkg=NA                       brewpkg=gnu-tar
+    prog=git            aptpkg=git
+    prog=gpg            aptpkg=gnupg                    brewpkg=gpg
+    prog=gpg-agent      aptpkg=gnupg-agent              brewpkg=gpg-agent
+    prog=gpg2           aptpkg=gnupg2                   brewpkg=gpg2
+    prog=hg             aptpkg=mercurial
+    prog=htop           aptpkg=htop                     brewpkg=htop
+    prog=identify       aptpkg=imagemagick              brewpkg=imagemagick
+    prog=iftop          aptpkg=iftop                    brewpkg=iftop
+    prog=inotifywait    aptpkg=inotify-tools            brewpkg=NA
+    prog=iotop          aptpkg=iotop
+    prog=irssi          aptpkg=irssi                    brewpkg=irssi
+    prog=keychain       aptpkg=keychain                 brewpkg=keychain
+    prog=md5deep        aptpkg=md5deep                  brewpkg=md5deep
+    prog=md5sum                                         brewpkg=md5sha1sum
+    prog=mencoder       aptpkg=mencoder
+    prog=mosh           aptpkg=mosh                     brewpkg=mosh            min_ver=1.2.5       ppa=ppa:keithw/mosh
+    prog=mp3blaster     aptpkg=mp3blaster               brewpkg=mp3blaster
+    prog=mplayer        aptpkg=mplayer                  brewpkg=mplayer
+    prog=mtr                                            brewpkg=mtr
+    prog=mutt           aptpkg=mutt                     brewpkg=mutt
+    prog=nc             aptpkg=netcat
+    prog=ncdu           aptpkg=ncdu                     brewpkg=ncdu
+    prog=nmap           aptpkg=nmap                     brewpkg=nmap
+    prog=parallel       aptpkg=parallel                 brewpkg=parallel
+    prog=pdftk          aptpkg=pdftk                    brewpkg=pdftk                               brewtap=docmunch/pdftk
+    prog=pv             aptpkg=pv                       brewpkg=pv
+    prog=python
+    prog=rsync
+    prog=screen
+    prog=ssh
+    prog=ssh-agent
+    prog=svn            aptpkg=subversion
+    prog=tig            aptpkg=tig
+    prog=unrar
+    prog=unzip          aptpkg=unzip
+    prog=vim            aptpkg=vim                      brewpkg=vim             min_ver=7.4
+    prog=emacs          aptpkg=emacs                    brewpkg=emacs
+    prog=wget           aptpkg=wget
+"
+
+### Main code
+PLATFORM_NAME=$(uname -s)
+
+# Step 1: check programs
+failed_progs=""
+suggested_linux=""
+suggested_ppa=""
+suggested_brew=""
+suggested_brew_tap=""
+
+while read line; do
+    prog=
+    min_ver=
+    ver_flag=
+    aptpkg=
+    brewpkg=
+    ppa=
+    brewtap=
+
+    eval "$line"
+
+    if [[ $prog == "" ]]; then
+        continue
+    fi
+
+    printf "%-15s" "$prog"
+
+    if [[ $ver_flag == "" ]]; then
+        ver_flag="--version"
+    fi
+
+    skipped=
+    failed=
+    fail_msg=
+    succ_msg=
+    skip_msg=
+
+    # Check existence
+    found=$(which $prog 2>/dev/null)
+    if [[ $? != 0 ]]; then
+        failed=1
+        fail_msg="not found"
+    else
+        succ_msg="$found"
+    fi
+
+    # Check version
+    if [[ $failed == "" && $min_ver != "" ]]; then
+        version=$($prog $ver_flag 2>&1 | head -1 | sed -e 's/[^0-9]*\([0-9][0-9.-]*\).*/\1/g')
+        if [[ $version < $min_ver ]]; then
+            failed=1
+            fail_msg="version $version < $min_ver"
+        else
+            succ_msg="$succ_msg version $version"
+        fi
+    fi
+
+    if [[ $PLATFORM_NAME == Linux && $aptpkg == NA ]]; then
+        skipped=1
+        skip_msg="no package available"
+    fi
+
+    if [[ $PLATFORM_NAME == Darwin && $brewpkg == NA ]]; then
+        skipped=1
+        skip_msg="no package available"
+    fi
+
+    if [[ $skipped != "" ]]; then
+        printf "%-30s" "  SKIPPED: $skip_msg"
+
+    elif [[ $failed == "" ]]; then
+        printf "%-30s" "  PASS    $succ_msg"
+
+    else
+        printf "%-30s" "!!FAIL!!  $fail_msg"
+
+        failed_progs="$failed_progs $prog"
+
+        if [[ $aptpkg != "" ]]; then
+            suggested_linux="$suggested_linux $aptpkg"
+        fi
+
+        if [[ $brewpkg != "" ]]; then
+            suggested_brew="$suggested_brew $brewpkg"
+        fi
+
+        if [[ $brewtap != "" ]]; then
+            suggested_brew_tap="$suggested_brew_tap $brewtap"
+        fi
+
+        if [[ $ppa != "" ]]; then
+            suggested_ppa="$suggested_ppa $ppa"
+        fi
+    fi
+
+    printf "\n"
+done < <(echo "$PROGRAMS" | sort -u)
+
+# Step 2: offer to install programs
+if [[ $failed_progs == "" ]]; then
+    echo
+    echo "Success"
+    exit 0
+else
+    echo
+    echo "Failed:$failed_progs"
+
+    if [[ $PLATFORM_NAME == Linux ]]; then
+        if [[ $suggested_ppa != "" ]]; then
+            install_cmd="sudo apt-add-repository$suggested_ppa; sudo apt-get update; "
+        fi
+
+        if [[ $suggested_linux != "" ]]; then
+            install_cmd="$install_cmd""sudo apt-get install$suggested_linux"
+        fi
+    fi
+
+    if [[ $PLATFORM_NAME == Darwin ]]; then
+        if [[ $suggested_brew_tap != "" ]]; then
+            install_cmd="brew tap$suggested_brew_tap; "
+        fi
+
+        if [[ $suggested_brew != "" ]]; then
+            install_cmd="$install_cmd""brew install$suggested_brew"
+        fi
+    fi
+
+    if [[ $install_cmd != "" ]]; then
+        echo "Suggest: $install_cmd"
+        echo -n "Run this command now? (y/n): "
+        read run
+        if [[ $run == "y" ]]; then
+            eval $install_cmd
+        fi
+    fi
+
+    exit 2
+fi
+
+# brew remove mplayer
+# brew install https://raw.githubusercontent.com/Homebrew/legacy-homebrew/0f3ba89b0d2609b0464a60f60e320b5f3f2a714c/Library/Formula/mplayer.rb
+# brew pin mplayer
